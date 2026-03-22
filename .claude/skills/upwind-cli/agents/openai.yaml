@@ -1,0 +1,7 @@
+interface:
+  display_name: "Upwind CLI"
+  short_description: "Use the Upwind CLI effectively"
+  default_prompt: "Use $upwind-cli to help me configure and run this CLI."
+
+policy:
+  allow_implicit_invocation: true
