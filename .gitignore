@@ -1,5 +1,6 @@
 .env
 /upwind
+/dist
 
 # Go build and test outputs
 *.exe

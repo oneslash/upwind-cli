@@ -12,6 +12,15 @@
 go build -o upwind .
 ```
 
+To print the embedded build metadata:
+
+```bash
+./upwind version
+./upwind --version
+```
+
+Tagged release builds inject the tag, commit, and build date automatically.
+
 ## Refresh Generated API Catalog
 
 This repository does not vendor the upstream OpenAPI YAML files. Instead, it generates [internal/openapi/catalog_generated.go](/Users/sardo/Projects/upwind-cli/internal/openapi/catalog_generated.go) from the sibling spec repository at `../spec-upwind`.
@@ -158,6 +167,34 @@ go test ./...
 go vet ./...
 go build -o upwind .
 ```
+
+To validate the release configuration without publishing a GitHub Release:
+
+```bash
+go run github.com/goreleaser/goreleaser/v2@v2.14.3 check
+go run github.com/goreleaser/goreleaser/v2@v2.14.3 release --snapshot --skip=publish --clean
+```
+
+## Releases
+
+This repository uses GoReleaser for tagged releases. The workflow lives at [.github/workflows/release.yml](/Users/sardo/Projects/upwind-cli/.github/workflows/release.yml) and triggers when a Git tag matching `v*` is pushed.
+
+On each matching tag, GitHub Actions:
+
+- checks out the full git history
+- installs the Go toolchain from `go.mod`
+- runs `go test ./...`
+- runs GoReleaser to build `upwind` for Linux, macOS, and Windows on `amd64` and `arm64`
+- uploads the archives and `checksums.txt` asset to the GitHub Release for that tag
+
+Create and publish a release tag with:
+
+```bash
+git tag -a v0.1.0 -m "Release v0.1.0"
+git push origin v0.1.0
+```
+
+The GoReleaser configuration is stored in [.goreleaser.yaml](/Users/sardo/Projects/upwind-cli/.goreleaser.yaml).
 
 Useful smoke checks:
 

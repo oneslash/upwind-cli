@@ -17,12 +17,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"upwind-cli/internal/auth"
+	"upwind-cli/internal/buildinfo"
 	"upwind-cli/internal/config"
 	"upwind-cli/internal/openapi"
 	"upwind-cli/internal/render"
 )
-
-const userAgent = "upwind-cli/0.1.0"
 
 func NewRootCmd() (*cobra.Command, error) {
 	if err := config.LoadDotEnv(); err != nil {
@@ -53,7 +52,9 @@ func NewRootCmd() (*cobra.Command, error) {
 		Long:          "A Cobra-based Upwind CLI generated from the provided OpenAPI specifications. When the same tag and operation exist in both versions, the CLI prefers the v2 definition.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		Version:       buildinfo.Short(),
 	}
+	rootCmd.SetVersionTemplate(buildinfo.Details())
 
 	flags := rootCmd.PersistentFlags()
 	flags.StringVarP(&options.OrganizationID, "organization-id", "o", options.OrganizationID, fmt.Sprintf("Upwind organization ID (env %s)", config.EnvOrganizationID))
@@ -67,11 +68,25 @@ func NewRootCmd() (*cobra.Command, error) {
 	flags.StringVar(&options.Output, "output", defaultIfEmpty(options.Output, "table"), fmt.Sprintf("Output format: table or json (env %s)", config.EnvOutput))
 	flags.DurationVar(&options.Timeout, "timeout", options.Timeout, fmt.Sprintf("HTTP timeout (env %s)", config.EnvTimeout))
 
+	rootCmd.AddCommand(newVersionCommand())
+
 	for _, tag := range catalog.PreferredTags() {
 		rootCmd.AddCommand(newTagCommand(options, tag))
 	}
 
 	return rootCmd, nil
+}
+
+func newVersionCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print build version information",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, err := fmt.Fprint(cmd.OutOrStdout(), buildinfo.Details())
+			return err
+		},
+	}
 }
 
 func newTagCommand(options *config.Options, tag openapi.TagGroup) *cobra.Command {
@@ -400,7 +415,7 @@ func (r requestExecutor) doRequest(ctx context.Context, method string, rawURL st
 		return nil, nil, err
 	}
 	request.Header.Set("Accept", "application/json")
-	request.Header.Set("User-Agent", userAgent)
+	request.Header.Set("User-Agent", buildinfo.UserAgent())
 	if len(requestBody) > 0 {
 		request.Header.Set("Content-Type", "application/json")
 	}

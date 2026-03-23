@@ -1,6 +1,8 @@
 package app
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 	"net/url"
 	"slices"
@@ -8,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"upwind-cli/internal/buildinfo"
 	"upwind-cli/internal/openapi"
 )
 
@@ -206,5 +209,29 @@ func TestNewRootCmdBuildsVersionlessTagTree(t *testing.T) {
 	}
 	if !slices.Contains(commandNames, "threats") {
 		t.Fatalf("expected merged root command tree to include threats, got %v", commandNames)
+	}
+}
+
+func TestNewRootCmdVersionCommandUsesBuildInfo(t *testing.T) {
+	rootCmd, err := NewRootCmd()
+	if err != nil {
+		t.Fatalf("NewRootCmd returned error: %v", err)
+	}
+
+	if rootCmd.Version != buildinfo.Short() {
+		t.Fatalf("expected root version %q, got %q", buildinfo.Short(), rootCmd.Version)
+	}
+
+	output := &bytes.Buffer{}
+	rootCmd.SetOut(output)
+	rootCmd.SetErr(io.Discard)
+	rootCmd.SetArgs([]string{"version"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if got := output.String(); got != buildinfo.Details() {
+		t.Fatalf("unexpected version output: %q", got)
 	}
 }
