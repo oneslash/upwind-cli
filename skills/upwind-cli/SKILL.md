@@ -36,6 +36,8 @@ Read [references/usage.md](references/usage.md) for the full reference. Use this
 4. **Match output to context** — `--output table` for human reading, `--output json` for scripting or jq pipelines.
 5. **Mention `--all` when results may be paginated** — the CLI supports page, token (Link-header), and cursor pagination; `--all` handles all three automatically.
 6. **Discover request body shape** — run `./upwind <tag> <operation> --help` and read the OpenAPI description, or point the user to the Upwind API docs. The CLI accepts `--body '{...}'`, `--body-file request.json`, or `--body-file -` (stdin).
+7. **Know which operations need a body** — GET operations (list, get) never need one. POST operations (search, create) typically require one; some mark it as required, meaning the CLI errors without it. PUT/PATCH operations (update) need one for the fields being changed. Run `--help` to confirm: if `--body` and `--body-file` flags appear, the operation accepts a body.
+8. **Show error handling** — when suggesting commands, tell the user what common errors look like and how to fix them. See the Gotchas and Error Reference sections below.
 
 ## Key Facts (quick reference)
 
@@ -44,6 +46,18 @@ Read [references/usage.md](references/usage.md) for the full reference. Use this
 upwind <tag> <operation> [flags]
 ```
 Examples: `upwind threats list-threat-detections`, `upwind inventory search-assets`
+
+### HTTP method patterns
+
+| Pattern | Method | Body? | Example operations |
+|---------|--------|-------|--------------------|
+| `list-*`, `get-*` | GET | No | `list-threat-detections`, `get-asset` |
+| `search-*` | POST | Yes (usually required) | `search-assets`, `search-stories` |
+| `create-*`, `add-*` | POST | Yes (required) | `create-workflow` |
+| `update-*` | PUT/PATCH | Yes (required) | `update-threat-detection` |
+| `delete-*`, `remove-*` | DELETE | No (usually) | `delete-workflow` |
+
+These are conventions from the upstream API — always verify with `--help` since individual operations may differ.
 
 ### Required config (every invocation)
 | What | Flag | Env var |
@@ -75,6 +89,73 @@ Examples: `upwind threats list-threat-detections`, `upwind inventory search-asse
 - `table` — human-readable, nested fields flattened with dot notation (e.g. `metadata.status`)
 - `json` — pretty-printed, preserves full API response structure
 
+## Common Workflows
+
+These multi-step examples show how commands chain together in real usage.
+
+### Investigate a threat detection
+
+```bash
+# List high-severity detections
+./upwind threats list-threat-detections --severity HIGH
+
+# Get details on a specific detection (use an ID from the list output)
+./upwind --output json threats get-threat-detection --detection-id det_abc123
+
+# Archive it
+./upwind threats update-threat-detection \
+  --detection-id det_abc123 \
+  --body '{"status":"ARCHIVED"}'
+```
+
+### Search assets and drill down
+
+```bash
+# Search for compute assets
+./upwind inventory search-assets \
+  --body '{"conditions":[{"field":"category","operator":"eq","value":["compute_platform"]}]}' \
+  --limit 50
+
+# Get full details on a specific asset as JSON
+./upwind --output json inventory get-asset --id uwr-b7d8d158c28ab7ca281fd424311e9d19
+
+# Fetch all matching assets across pages
+./upwind inventory search-assets --all --limit 200 \
+  --body '{"conditions":[{"field":"category","operator":"eq","value":["compute_platform"]}]}'
+```
+
+### Export data for scripting
+
+```bash
+# Get all shift-left events as JSON and extract IDs with jq
+./upwind --output json events search-shift-left-events --all --per-page 100 \
+  --body-file query.json | jq '.[].id'
+
+# Pipe a body from another command
+echo '{"conditions":[]}' | ./upwind inventory search-assets --body-file - --limit 10
+```
+
+## Error Reference
+
+These are the exact error strings the CLI produces and what causes them.
+
+| Error message | Cause | Fix |
+|---------------|-------|-----|
+| `missing organization ID: set --organization-id or UPWIND_ORGANIZATION_ID` | No org ID provided | Set the flag or env var |
+| `unsupported region "xx" (expected us, eu, or me)` | Invalid region value | Use `us`, `eu`, or `me` |
+| `missing credentials: set UPWIND_CLIENT_ID/UPWIND_CLIENT_SECRET or UPWIND_ACCESS_TOKEN` | No auth configured | Provide client credentials or a token |
+| `oauth token request failed: <error> (<description>)` | Bad client ID/secret or no API access | Verify credentials with the Upwind console |
+| `use either --body or --body-file, not both` | Both body flags set | Remove one |
+| `invalid JSON request body: <parse error>` | Malformed JSON in `--body` or `--body-file` | Validate the JSON before passing it |
+| `this operation requires a JSON request body` | POST/PUT with `BodyRequired` but no body given | Add `--body` or `--body-file` |
+| `missing required path parameter --<flag>` | A required path parameter was not provided | Add the missing flag (e.g. `--detection-id`) |
+| `request failed: 400 Bad Request\n{...}` | Server rejected the request | Read the JSON error body — the API returns a descriptive message |
+| `request failed: 401 Unauthorized` | Token expired or invalid | Refresh credentials; if using `--access-token`, get a new token |
+| `request failed: 403 Forbidden` | No permission for this operation/org | Check org ID and API role |
+| `unsupported output format "x" (expected table or json)` | Bad `--output` value | Use `table` or `json` |
+
+HTTP errors (status >= 400) include the response body when the API returns one. The CLI pretty-prints it as indented JSON, so the user can read the `message` or `error` field directly.
+
 ## Gotchas
 
 - `--organization-id` is **always required** and is injected automatically into API paths; omitting it gives: `missing organization ID: set --organization-id or UPWIND_ORGANIZATION_ID`
@@ -84,6 +165,8 @@ Examples: `upwind threats list-threat-detections`, `upwind inventory search-asse
 - `--access-token` takes priority over `--client-id`/`--client-secret`; if set, no OAuth call is made
 - Tokens are cached **in memory only** — each CLI invocation fetches a fresh token unless the cached one has >30 s remaining (only matters within a single process)
 - The `.env` file in the current working directory is loaded automatically and silently; env vars and flags override it
+- Operations with `BodyRequired: true` will fail immediately if no `--body` or `--body-file` is provided — the CLI checks this *before* making the HTTP request
+- The CLI validates that bodies are valid JSON but does **not** enforce the API schema — invalid fields produce a 400 from the server, not a local error
 
 ## Validation
 

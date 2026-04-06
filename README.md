@@ -207,52 +207,61 @@ Useful smoke checks:
 
 ## AI Skill
 
-This repository now includes a portable Agent Skills skill at `.claude/skills/upwind-cli`. It is written for this codebase, so it teaches an agent:
+This repository includes an [Agent Skill](https://skills.sh) at `skills/upwind-cli/`. It teaches AI agents how to operate the CLI — authentication, command discovery, request bodies, pagination, output modes, and troubleshooting.
 
-- where command generation comes from
-- how auth, config, pagination, and rendering are wired together
-- which files to edit for spec, runtime, or docs changes
-- which validation commands to run before finishing
+### Install with skills.sh (recommended)
 
-### Use It In Codex
-
-Codex skills live under `$CODEX_HOME/skills` or, if `CODEX_HOME` is unset, `~/.codex/skills`.
+The easiest way to install the skill into any supported agent (Claude Code, Cursor, Codex, OpenCode, Gemini CLI, and [40+ more](https://github.com/vercel-labs/skills#supported-agents)):
 
 ```bash
-mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
-ln -snf "$(pwd)/.claude/skills/upwind-cli" "${CODEX_HOME:-$HOME/.codex}/skills/upwind-cli"
+npx skills add oneslash/upwind-cli
 ```
 
-Then invoke it explicitly in Codex with prompts like:
+This auto-detects which agents you have installed and symlinks the skill into each one.
 
-- `Use $upwind-cli to explain how this repository generates Cobra commands.`
-- `Use $upwind-cli to add a new test for pagination behavior.`
-
-### Use It In Claude Code
-
-Claude Code automatically discovers project skills stored at `.claude/skills/<skill-name>/SKILL.md`, so if you open this repository in Claude Code, the skill is already available as `/upwind-cli`.
-
-To install it globally instead of per-project:
+To install into specific agents:
 
 ```bash
+npx skills add oneslash/upwind-cli -a claude-code -a cursor -a codex
+```
+
+To install globally (available across all projects):
+
+```bash
+npx skills add oneslash/upwind-cli -g
+```
+
+### Project-level (automatic)
+
+When you open this repository in an agent that supports project-level skills, the skill is discovered automatically:
+
+- **Claude Code** — discovers `.claude/skills/upwind-cli/` (symlinked to `skills/upwind-cli/`)
+- **Cursor** — discovers via `skills/` or `.agents/skills/`
+- **Codex, OpenCode, Gemini CLI** — discovers via `skills/` directory
+
+No installation needed — just open the project.
+
+### Manual global install
+
+If you prefer manual setup without `npx skills`:
+
+```bash
+# Claude Code
 mkdir -p ~/.claude/skills
-ln -snf "$(pwd)/.claude/skills/upwind-cli" ~/.claude/skills/upwind-cli
-```
+ln -snf "$(pwd)/skills/upwind-cli" ~/.claude/skills/upwind-cli
 
-### Use It In OpenCode
+# Codex
+mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
+ln -snf "$(pwd)/skills/upwind-cli" "${CODEX_HOME:-$HOME/.codex}/skills/upwind-cli"
 
-OpenCode supports both native `.opencode/skills` directories and Claude-compatible `.claude/skills` directories. Because this repository already includes `.claude/skills/upwind-cli`, the skill is available automatically when you work in this project with OpenCode.
-
-To install it globally for OpenCode:
-
-```bash
+# OpenCode
 mkdir -p ~/.config/opencode/skills
-ln -snf "$(pwd)/.claude/skills/upwind-cli" ~/.config/opencode/skills/upwind-cli
+ln -snf "$(pwd)/skills/upwind-cli" ~/.config/opencode/skills/upwind-cli
+
+# Cursor
+mkdir -p ~/.cursor/skills
+ln -snf "$(pwd)/skills/upwind-cli" ~/.cursor/skills/upwind-cli
 ```
-
-### Use It In Other Agent-Skills-Compatible Tools
-
-The skill follows the standard `SKILL.md` folder layout, so any compatible tool can usually consume it by copying or symlinking the `.claude/skills/upwind-cli` directory into that tool's skills directory.
 
 ## Examples
 
