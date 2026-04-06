@@ -24,8 +24,6 @@ Use this skill when the user wants help **operating** the `upwind` binary:
 - enabling shell completion
 - interpreting errors or troubleshooting failed requests
 
-To modify Go source code, explain internals, or change generated behavior → read [references/architecture.md](references/architecture.md).
-
 ## How To Help
 
 Read [references/usage.md](references/usage.md) for the full reference. Use this workflow:
