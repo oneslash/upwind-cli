@@ -2,11 +2,25 @@
 
 `upwind` is a Go 1.26.1 Cobra CLI for the Upwind Management APIs. It builds a versionless command tree from generated Go catalog data derived from the upstream OpenAPI v1 and v2 specifications, prefers the v2 definition when the same tag and operation exist in both versions, supports table and JSON output, loads `.env` automatically when present, and handles the pagination patterns described by the supplied specs.
 
+## Install
+
+Install the latest release with Go:
+
+```bash
+go install github.com/oneslash/upwind-cli@latest
+```
+
+Then verify the binary is on your `PATH`:
+
+```bash
+upwind version
+```
+
 ## Requirements
 
 - Go 1.26.1
 
-## Build
+## Build From Source
 
 ```bash
 go build -o upwind .
