@@ -101,37 +101,7 @@ func (c Catalog) PreferredTags() []TagGroup {
 		}
 	}
 
-	tagNames := make([]string, 0, len(grouped))
-	for tag := range grouped {
-		tagNames = append(tagNames, tag)
-	}
-	sort.Strings(tagNames)
-
-	tags := make([]TagGroup, 0, len(tagNames))
-	for _, tagName := range tagNames {
-		operationsByCommand := grouped[tagName]
-		operations := make([]Operation, 0, len(operationsByCommand))
-		for _, operation := range operationsByCommand {
-			operations = append(operations, operation)
-		}
-
-		sort.Slice(operations, func(i, j int) bool {
-			if operations[i].CommandName == operations[j].CommandName {
-				if operations[i].Path == operations[j].Path {
-					return operations[i].Method < operations[j].Method
-				}
-				return operations[i].Path < operations[j].Path
-			}
-			return operations[i].CommandName < operations[j].CommandName
-		})
-
-		tags = append(tags, TagGroup{
-			Name:       tagName,
-			Operations: operations,
-		})
-	}
-
-	return tags
+	return preferredTagGroups(grouped)
 }
 
 type rawDocument struct {
@@ -206,13 +176,7 @@ func ParseVersion(version string, contents []byte) (VersionGroup, error) {
 
 	grouped := map[string][]Operation{}
 	for path, item := range document.Paths {
-		for method, operation := range map[string]*rawOperation{
-			"GET":    item.Get,
-			"POST":   item.Post,
-			"PATCH":  item.Patch,
-			"PUT":    item.Put,
-			"DELETE": item.Delete,
-		} {
+		for method, operation := range item.operationsByMethod() {
 			if operation == nil {
 				continue
 			}
@@ -226,81 +190,22 @@ func ParseVersion(version string, contents []byte) (VersionGroup, error) {
 		}
 	}
 
-	tagNames := make([]string, 0, len(grouped))
-	for tag := range grouped {
-		tagNames = append(tagNames, tag)
-	}
-	sort.Strings(tagNames)
-
 	versionGroup := VersionGroup{Name: version}
-	for _, tag := range tagNames {
-		operations := grouped[tag]
-		sort.Slice(operations, func(i, j int) bool {
-			if operations[i].CommandName == operations[j].CommandName {
-				if operations[i].Path == operations[j].Path {
-					return operations[i].Method < operations[j].Method
-				}
-				return operations[i].Path < operations[j].Path
-			}
-			return operations[i].CommandName < operations[j].CommandName
-		})
-
-		versionGroup.Tags = append(versionGroup.Tags, TagGroup{
-			Name:       tag,
-			Operations: operations,
-		})
-	}
+	versionGroup.Tags = append(versionGroup.Tags, buildTagGroups(grouped)...)
 
 	return versionGroup, nil
 }
 
 func resolveOperation(version, method, path string, operation *rawOperation, components rawComponents) (Operation, error) {
-	parameters := make([]Parameter, 0, len(operation.Parameters))
-	var pathParameters []Parameter
-	var queryParameters []Parameter
-
-	for _, candidate := range operation.Parameters {
-		resolved, err := resolveParameter(candidate, components)
-		if err != nil {
-			return Operation{}, err
-		}
-		parameters = append(parameters, resolved)
+	pathParameters, queryParameters, err := resolveOperationParameters(operation.Parameters, components)
+	if err != nil {
+		return Operation{}, err
 	}
 
-	for _, parameter := range parameters {
-		switch parameter.In {
-		case "path":
-			pathParameters = append(pathParameters, parameter)
-		case "query":
-			queryParameters = append(queryParameters, parameter)
-		}
-	}
-
-	tag := "misc"
-	if len(operation.Tags) > 0 && strings.TrimSpace(operation.Tags[0]) != "" {
-		tag = strings.TrimSpace(operation.Tags[0])
-	}
-
+	tag := primaryTag(operation.Tags)
 	pagination := detectPagination(queryParameters)
-
-	bodyDescription := ""
-	hasJSONBody := false
-	bodyRequired := false
-	if operation.RequestBody != nil {
-		if _, ok := operation.RequestBody.Content["application/json"]; ok {
-			hasJSONBody = true
-			bodyRequired = operation.RequestBody.Required
-			bodyDescription = strings.TrimSpace(operation.RequestBody.Description)
-		}
-	}
-
-	commandName := toKebabCase(operation.OperationID)
-	if commandName == "" {
-		commandName = toKebabCase(strings.TrimSpace(operation.Summary))
-	}
-	if commandName == "" {
-		commandName = strings.ToLower(method)
-	}
+	hasJSONBody, bodyRequired, bodyDescription := requestBodyInfo(operation.RequestBody)
+	commandName := operationCommandName(operation, method)
 
 	return Operation{
 		Version:         version,
@@ -321,57 +226,23 @@ func resolveOperation(version, method, path string, operation *rawOperation, com
 }
 
 func resolveParameter(parameter rawParameter, components rawComponents) (Parameter, error) {
-	if parameter.Ref != "" {
-		name := strings.TrimPrefix(parameter.Ref, "#/components/parameters/")
-		resolved, ok := components.Parameters[name]
-		if !ok {
-			return Parameter{}, fmt.Errorf("unresolved parameter ref %q", parameter.Ref)
-		}
-		parameter = resolved
-	}
-
-	paramType := ParamString
-	switch strings.ToLower(strings.TrimSpace(parameter.Schema.Type)) {
-	case "integer":
-		paramType = ParamInteger
-	case "boolean":
-		paramType = ParamBoolean
-	case "array":
-		paramType = ParamArray
-	}
-
-	itemType := ParamString
-	if parameter.Schema.Items != nil {
-		switch strings.ToLower(strings.TrimSpace(parameter.Schema.Items.Type)) {
-		case "integer":
-			itemType = ParamInteger
-		case "boolean":
-			itemType = ParamBoolean
-		}
-	}
-
-	enumValues := make([]string, 0, len(parameter.Schema.Enum))
-	for _, value := range parameter.Schema.Enum {
-		enumValues = append(enumValues, fmt.Sprint(value))
-	}
-
-	arrayFormat := ArrayEncodingRepeat
-	if parameter.Name == "cloud-account-tags" {
-		arrayFormat = ArrayEncodingCSV
+	resolved, err := resolveParameterRef(parameter, components)
+	if err != nil {
+		return Parameter{}, err
 	}
 
 	return Parameter{
-		Name:        parameter.Name,
-		FlagName:    strings.TrimSpace(parameter.Name),
-		In:          strings.TrimSpace(parameter.In),
-		Description: strings.TrimSpace(parameter.Description),
-		Required:    parameter.Required,
-		Deprecated:  parameter.Deprecated,
-		Type:        paramType,
-		ItemType:    itemType,
-		ArrayFormat: arrayFormat,
-		Default:     parameter.Schema.Default,
-		Enum:        enumValues,
+		Name:        resolved.Name,
+		FlagName:    strings.TrimSpace(resolved.Name),
+		In:          strings.TrimSpace(resolved.In),
+		Description: strings.TrimSpace(resolved.Description),
+		Required:    resolved.Required,
+		Deprecated:  resolved.Deprecated,
+		Type:        schemaParamType(resolved.Schema),
+		ItemType:    schemaItemType(resolved.Schema.Items),
+		ArrayFormat: arrayEncodingForParameter(resolved.Name),
+		Default:     resolved.Schema.Default,
+		Enum:        enumStrings(resolved.Schema.Enum),
 	}, nil
 }
 
@@ -456,4 +327,196 @@ func versionPriority(version string) int {
 	default:
 		return 0
 	}
+}
+
+func (item rawPathItem) operationsByMethod() map[string]*rawOperation {
+	return map[string]*rawOperation{
+		"GET":    item.Get,
+		"POST":   item.Post,
+		"PATCH":  item.Patch,
+		"PUT":    item.Put,
+		"DELETE": item.Delete,
+	}
+}
+
+func preferredTagGroups(grouped map[string]map[string]Operation) []TagGroup {
+	tagNames := sortedMapKeys(grouped)
+	tags := make([]TagGroup, 0, len(tagNames))
+	for _, tagName := range tagNames {
+		tags = append(tags, TagGroup{
+			Name:       tagName,
+			Operations: sortedPreferredOperations(grouped[tagName]),
+		})
+	}
+
+	return tags
+}
+
+func buildTagGroups(grouped map[string][]Operation) []TagGroup {
+	tagNames := sortedMapKeys(grouped)
+	tags := make([]TagGroup, 0, len(tagNames))
+	for _, tagName := range tagNames {
+		tags = append(tags, TagGroup{
+			Name:       tagName,
+			Operations: sortOperations(grouped[tagName]),
+		})
+	}
+
+	return tags
+}
+
+func sortedPreferredOperations(operationsByCommand map[string]Operation) []Operation {
+	operations := make([]Operation, 0, len(operationsByCommand))
+	for _, operation := range operationsByCommand {
+		operations = append(operations, operation)
+	}
+
+	return sortOperations(operations)
+}
+
+func sortOperations(operations []Operation) []Operation {
+	sort.Slice(operations, func(i, j int) bool {
+		if operations[i].CommandName == operations[j].CommandName {
+			if operations[i].Path == operations[j].Path {
+				return operations[i].Method < operations[j].Method
+			}
+			return operations[i].Path < operations[j].Path
+		}
+		return operations[i].CommandName < operations[j].CommandName
+	})
+
+	return operations
+}
+
+func sortedMapKeys[T any](values map[string]T) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func resolveOperationParameters(parameters []rawParameter, components rawComponents) ([]Parameter, []Parameter, error) {
+	resolvedParameters := make([]Parameter, 0, len(parameters))
+	for _, candidate := range parameters {
+		resolved, err := resolveParameter(candidate, components)
+		if err != nil {
+			return nil, nil, err
+		}
+		resolvedParameters = append(resolvedParameters, resolved)
+	}
+
+	pathParameters := make([]Parameter, 0, len(resolvedParameters))
+	queryParameters := make([]Parameter, 0, len(resolvedParameters))
+	for _, parameter := range resolvedParameters {
+		switch parameter.In {
+		case "path":
+			pathParameters = append(pathParameters, parameter)
+		case "query":
+			queryParameters = append(queryParameters, parameter)
+		}
+	}
+
+	return pathParameters, queryParameters, nil
+}
+
+func primaryTag(tags []string) string {
+	if len(tags) == 0 {
+		return "misc"
+	}
+
+	tag := strings.TrimSpace(tags[0])
+	if tag == "" {
+		return "misc"
+	}
+
+	return tag
+}
+
+func requestBodyInfo(body *rawRequestBody) (bool, bool, string) {
+	if body == nil {
+		return false, false, ""
+	}
+
+	if _, ok := body.Content["application/json"]; !ok {
+		return false, false, ""
+	}
+
+	return true, body.Required, strings.TrimSpace(body.Description)
+}
+
+func operationCommandName(operation *rawOperation, method string) string {
+	commandName := toKebabCase(operation.OperationID)
+	if commandName == "" {
+		commandName = toKebabCase(strings.TrimSpace(operation.Summary))
+	}
+	if commandName == "" {
+		commandName = strings.ToLower(method)
+	}
+
+	return commandName
+}
+
+func resolveParameterRef(parameter rawParameter, components rawComponents) (rawParameter, error) {
+	if parameter.Ref == "" {
+		return parameter, nil
+	}
+
+	name := strings.TrimPrefix(parameter.Ref, "#/components/parameters/")
+	resolved, ok := components.Parameters[name]
+	if !ok {
+		return rawParameter{}, fmt.Errorf("unresolved parameter ref %q", parameter.Ref)
+	}
+
+	return resolved, nil
+}
+
+func schemaParamType(schema rawSchema) ParamType {
+	switch normalizedSchemaType(schema.Type) {
+	case "integer":
+		return ParamInteger
+	case "boolean":
+		return ParamBoolean
+	case "array":
+		return ParamArray
+	default:
+		return ParamString
+	}
+}
+
+func schemaItemType(items *rawSchema) ParamType {
+	if items == nil {
+		return ParamString
+	}
+
+	switch normalizedSchemaType(items.Type) {
+	case "integer":
+		return ParamInteger
+	case "boolean":
+		return ParamBoolean
+	default:
+		return ParamString
+	}
+}
+
+func normalizedSchemaType(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func enumStrings(values []any) []string {
+	enumValues := make([]string, 0, len(values))
+	for _, value := range values {
+		enumValues = append(enumValues, fmt.Sprint(value))
+	}
+
+	return enumValues
+}
+
+func arrayEncodingForParameter(name string) ArrayEncoding {
+	if name == "cloud-account-tags" {
+		return ArrayEncodingCSV
+	}
+
+	return ArrayEncodingRepeat
 }

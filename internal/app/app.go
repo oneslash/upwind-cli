@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -23,6 +22,8 @@ import (
 	"upwind-cli/internal/render"
 )
 
+var paginatedCollectionKeys = []string{"items", "resourceFindings"}
+
 func NewRootCmd() (*cobra.Command, error) {
 	if err := config.LoadDotEnv(); err != nil {
 		return nil, err
@@ -33,18 +34,7 @@ func NewRootCmd() (*cobra.Command, error) {
 		return nil, err
 	}
 
-	options := &config.Options{
-		OrganizationID: os.Getenv(config.EnvOrganizationID),
-		Region:         os.Getenv(config.EnvRegion),
-		BaseURL:        os.Getenv(config.EnvBaseURL),
-		AuthURL:        os.Getenv(config.EnvAuthURL),
-		Audience:       os.Getenv(config.EnvAudience),
-		ClientID:       os.Getenv(config.EnvClientID),
-		ClientSecret:   os.Getenv(config.EnvClientSecret),
-		AccessToken:    os.Getenv(config.EnvAccessToken),
-		Output:         os.Getenv(config.EnvOutput),
-		Timeout:        config.EnvDuration(config.EnvTimeout, 30*time.Second),
-	}
+	options := loadOptionsFromEnv()
 
 	rootCmd := &cobra.Command{
 		Use:           "upwind",
@@ -56,17 +46,7 @@ func NewRootCmd() (*cobra.Command, error) {
 	}
 	rootCmd.SetVersionTemplate(buildinfo.Details())
 
-	flags := rootCmd.PersistentFlags()
-	flags.StringVarP(&options.OrganizationID, "organization-id", "o", options.OrganizationID, fmt.Sprintf("Upwind organization ID (env %s)", config.EnvOrganizationID))
-	flags.StringVar(&options.Region, "region", defaultIfEmpty(options.Region, "us"), fmt.Sprintf("Region to target: us, eu, or me (env %s)", config.EnvRegion))
-	flags.StringVar(&options.BaseURL, "base-url", options.BaseURL, fmt.Sprintf("Override API base URL (env %s)", config.EnvBaseURL))
-	flags.StringVar(&options.AuthURL, "auth-url", options.AuthURL, fmt.Sprintf("Override OAuth base URL (env %s)", config.EnvAuthURL))
-	flags.StringVar(&options.Audience, "audience", options.Audience, fmt.Sprintf("OAuth audience override (env %s)", config.EnvAudience))
-	flags.StringVar(&options.ClientID, "client-id", options.ClientID, fmt.Sprintf("OAuth client ID (env %s)", config.EnvClientID))
-	flags.StringVar(&options.ClientSecret, "client-secret", options.ClientSecret, fmt.Sprintf("OAuth client secret (env %s)", config.EnvClientSecret))
-	flags.StringVar(&options.AccessToken, "access-token", options.AccessToken, fmt.Sprintf("Bearer token override (env %s)", config.EnvAccessToken))
-	flags.StringVar(&options.Output, "output", defaultIfEmpty(options.Output, "table"), fmt.Sprintf("Output format: table or json (env %s)", config.EnvOutput))
-	flags.DurationVar(&options.Timeout, "timeout", options.Timeout, fmt.Sprintf("HTTP timeout (env %s)", config.EnvTimeout))
+	configureRootFlags(rootCmd, options)
 
 	rootCmd.AddCommand(newVersionCommand())
 
@@ -107,15 +87,7 @@ func newOperationCommand(options *config.Options, operation openapi.Operation) *
 	var bodyFile string
 	var fetchAll bool
 
-	short := strings.TrimSpace(operation.Summary)
-	if short == "" {
-		short = fmt.Sprintf("%s %s", operation.Method, operation.Path)
-	}
-
-	longDescription := strings.TrimSpace(operation.Description)
-	if longDescription == "" {
-		longDescription = fmt.Sprintf("%s %s", operation.Method, operation.Path)
-	}
+	short, longDescription := operationDescriptions(operation)
 
 	cmd := &cobra.Command{
 		Use:   operation.CommandName,
@@ -123,44 +95,7 @@ func newOperationCommand(options *config.Options, operation openapi.Operation) *
 		Long:  longDescription,
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Resolve(*options)
-			if err != nil {
-				return err
-			}
-			if cfg.OrganizationID == "" {
-				return fmt.Errorf("missing organization ID: set --organization-id or %s", config.EnvOrganizationID)
-			}
-
-			httpClient := &http.Client{Timeout: cfg.Timeout}
-			authProvider := auth.NewProvider(httpClient, cfg)
-
-			pathValues, err := collectPathValues(cmd, cfg, operation.PathParameters)
-			if err != nil {
-				return err
-			}
-
-			queryValues, err := collectQueryValues(cmd, operation.QueryParameters)
-			if err != nil {
-				return err
-			}
-
-			requestBody, err := loadRequestBody(body, bodyFile, operation.BodyRequired)
-			if err != nil {
-				return err
-			}
-
-			executor := requestExecutor{
-				cfg:          cfg,
-				httpClient:   httpClient,
-				authProvider: authProvider,
-			}
-
-			value, err := executor.execute(cmd.Context(), cmd, operation, pathValues, queryValues, requestBody, fetchAll)
-			if err != nil {
-				return err
-			}
-
-			return render.Write(cmd.OutOrStdout(), cfg.Output, value)
+			return runOperation(cmd, *options, operation, body, bodyFile, fetchAll)
 		},
 	}
 
@@ -168,6 +103,103 @@ func newOperationCommand(options *config.Options, operation openapi.Operation) *
 		cmd.Aliases = []string{alias}
 	}
 
+	addOperationFlags(cmd, operation, &body, &bodyFile, &fetchAll)
+
+	return cmd
+}
+
+func loadOptionsFromEnv() *config.Options {
+	return &config.Options{
+		OrganizationID: os.Getenv(config.EnvOrganizationID),
+		Region:         os.Getenv(config.EnvRegion),
+		BaseURL:        os.Getenv(config.EnvBaseURL),
+		AuthURL:        os.Getenv(config.EnvAuthURL),
+		Audience:       os.Getenv(config.EnvAudience),
+		ClientID:       os.Getenv(config.EnvClientID),
+		ClientSecret:   os.Getenv(config.EnvClientSecret),
+		AccessToken:    os.Getenv(config.EnvAccessToken),
+		Output:         os.Getenv(config.EnvOutput),
+		Timeout:        config.EnvDuration(config.EnvTimeout, 30*time.Second),
+	}
+}
+
+func configureRootFlags(rootCmd *cobra.Command, options *config.Options) {
+	flags := rootCmd.PersistentFlags()
+	flags.StringVarP(&options.OrganizationID, "organization-id", "o", options.OrganizationID, fmt.Sprintf("Upwind organization ID (env %s)", config.EnvOrganizationID))
+	flags.StringVar(&options.Region, "region", defaultIfEmpty(options.Region, "us"), fmt.Sprintf("Region to target: us, eu, or me (env %s)", config.EnvRegion))
+	flags.StringVar(&options.BaseURL, "base-url", options.BaseURL, fmt.Sprintf("Override API base URL (env %s)", config.EnvBaseURL))
+	flags.StringVar(&options.AuthURL, "auth-url", options.AuthURL, fmt.Sprintf("Override OAuth base URL (env %s)", config.EnvAuthURL))
+	flags.StringVar(&options.Audience, "audience", options.Audience, fmt.Sprintf("OAuth audience override (env %s)", config.EnvAudience))
+	flags.StringVar(&options.ClientID, "client-id", options.ClientID, fmt.Sprintf("OAuth client ID (env %s)", config.EnvClientID))
+	flags.StringVar(&options.ClientSecret, "client-secret", options.ClientSecret, fmt.Sprintf("OAuth client secret (env %s)", config.EnvClientSecret))
+	flags.StringVar(&options.AccessToken, "access-token", options.AccessToken, fmt.Sprintf("Bearer token override (env %s)", config.EnvAccessToken))
+	flags.StringVar(&options.Output, "output", defaultIfEmpty(options.Output, "table"), fmt.Sprintf("Output format: table or json (env %s)", config.EnvOutput))
+	flags.DurationVar(&options.Timeout, "timeout", options.Timeout, fmt.Sprintf("HTTP timeout (env %s)", config.EnvTimeout))
+}
+
+func operationDescriptions(operation openapi.Operation) (string, string) {
+	fallback := fmt.Sprintf("%s %s", operation.Method, operation.Path)
+
+	short := strings.TrimSpace(operation.Summary)
+	if short == "" {
+		short = fallback
+	}
+
+	longDescription := strings.TrimSpace(operation.Description)
+	if longDescription == "" {
+		longDescription = fallback
+	}
+
+	return short, longDescription
+}
+
+func runOperation(
+	cmd *cobra.Command,
+	options config.Options,
+	operation openapi.Operation,
+	body string,
+	bodyFile string,
+	fetchAll bool,
+) error {
+	cfg, err := config.Resolve(options)
+	if err != nil {
+		return err
+	}
+	if cfg.OrganizationID == "" {
+		return fmt.Errorf("missing organization ID: set --organization-id or %s", config.EnvOrganizationID)
+	}
+
+	httpClient := &http.Client{Timeout: cfg.Timeout}
+	pathValues, err := collectPathValues(cmd, cfg, operation.PathParameters)
+	if err != nil {
+		return err
+	}
+
+	queryValues, err := collectQueryValues(cmd, operation.QueryParameters)
+	if err != nil {
+		return err
+	}
+
+	requestBody, err := loadRequestBody(body, bodyFile, operation.BodyRequired)
+	if err != nil {
+		return err
+	}
+
+	executor := requestExecutor{
+		cfg:          cfg,
+		httpClient:   httpClient,
+		authProvider: auth.NewProvider(httpClient, cfg),
+	}
+
+	value, err := executor.execute(cmd.Context(), cmd, operation, pathValues, queryValues, requestBody, fetchAll)
+	if err != nil {
+		return err
+	}
+
+	return render.Write(cmd.OutOrStdout(), cfg.Output, value)
+}
+
+func addOperationFlags(cmd *cobra.Command, operation openapi.Operation, body *string, bodyFile *string, fetchAll *bool) {
 	for _, parameter := range operation.PathParameters {
 		if parameter.Name == "organization-id" {
 			continue
@@ -187,15 +219,13 @@ func newOperationCommand(options *config.Options, operation openapi.Operation) *
 		if operation.BodyDescription != "" {
 			bodyHelp = operation.BodyDescription
 		}
-		cmd.Flags().StringVar(&body, "body", "", bodyHelp)
-		cmd.Flags().StringVar(&bodyFile, "body-file", "", "Path to a JSON request body file. Use - to read from stdin.")
+		cmd.Flags().StringVar(body, "body", "", bodyHelp)
+		cmd.Flags().StringVar(bodyFile, "body-file", "", "Path to a JSON request body file. Use - to read from stdin.")
 	}
 
 	if operation.Pagination != openapi.PaginationNone {
-		cmd.Flags().BoolVar(&fetchAll, "all", false, "Automatically paginate through all available results.")
+		cmd.Flags().BoolVar(fetchAll, "all", false, "Automatically paginate through all available results.")
 	}
-
-	return cmd
 }
 
 func addFlag(cmd *cobra.Command, parameter openapi.Parameter) {
@@ -265,55 +295,54 @@ func collectQueryValues(cmd *cobra.Command, parameters []openapi.Parameter) (url
 	values := url.Values{}
 
 	for _, parameter := range parameters {
-		switch parameter.Type {
-		case openapi.ParamInteger:
-			if !cmd.Flags().Changed(parameter.FlagName) {
-				continue
-			}
-			value, err := cmd.Flags().GetInt(parameter.FlagName)
-			if err != nil {
-				return nil, err
-			}
-			values.Set(parameter.Name, strconv.Itoa(value))
-		case openapi.ParamBoolean:
-			if !cmd.Flags().Changed(parameter.FlagName) {
-				continue
-			}
-			value, err := cmd.Flags().GetBool(parameter.FlagName)
-			if err != nil {
-				return nil, err
-			}
-			values.Set(parameter.Name, strconv.FormatBool(value))
-		case openapi.ParamArray:
-			if !cmd.Flags().Changed(parameter.FlagName) {
-				continue
-			}
-			items, err := cmd.Flags().GetStringSlice(parameter.FlagName)
-			if err != nil {
-				return nil, err
-			}
-			if parameter.ArrayFormat == openapi.ArrayEncodingCSV {
-				values.Set(parameter.Name, strings.Join(items, ","))
-				continue
-			}
-			for _, item := range items {
-				values.Add(parameter.Name, item)
-			}
-		default:
-			if !cmd.Flags().Changed(parameter.FlagName) {
-				continue
-			}
-			value, err := cmd.Flags().GetString(parameter.FlagName)
-			if err != nil {
-				return nil, err
-			}
-			if value != "" {
-				values.Set(parameter.Name, value)
-			}
+		if !cmd.Flags().Changed(parameter.FlagName) {
+			continue
+		}
+		if err := appendQueryValue(cmd, parameter, values); err != nil {
+			return nil, err
 		}
 	}
 
 	return values, nil
+}
+
+func appendQueryValue(cmd *cobra.Command, parameter openapi.Parameter, values url.Values) error {
+	switch parameter.Type {
+	case openapi.ParamInteger:
+		value, err := cmd.Flags().GetInt(parameter.FlagName)
+		if err != nil {
+			return err
+		}
+		values.Set(parameter.Name, strconv.Itoa(value))
+	case openapi.ParamBoolean:
+		value, err := cmd.Flags().GetBool(parameter.FlagName)
+		if err != nil {
+			return err
+		}
+		values.Set(parameter.Name, strconv.FormatBool(value))
+	case openapi.ParamArray:
+		items, err := cmd.Flags().GetStringSlice(parameter.FlagName)
+		if err != nil {
+			return err
+		}
+		if parameter.ArrayFormat == openapi.ArrayEncodingCSV {
+			values.Set(parameter.Name, strings.Join(items, ","))
+			return nil
+		}
+		for _, item := range items {
+			values.Add(parameter.Name, item)
+		}
+	default:
+		value, err := cmd.Flags().GetString(parameter.FlagName)
+		if err != nil {
+			return err
+		}
+		if value != "" {
+			values.Set(parameter.Name, value)
+		}
+	}
+
+	return nil
 }
 
 func loadRequestBody(body string, bodyFile string, required bool) ([]byte, error) {
@@ -502,50 +531,64 @@ func nextPageURL(
 ) (*url.URL, bool, error) {
 	switch style {
 	case openapi.PaginationV1Page:
-		itemCount := countItems(responseValue)
-		if itemCount == 0 {
-			return nil, false, nil
-		}
-		if pageSize > 0 && itemCount < pageSize {
-			return nil, false, nil
-		}
-
-		nextURL := *currentURL
-		query := nextURL.Query()
-		currentPage := 1
-		if raw := query.Get("page"); raw != "" {
-			value, err := strconv.Atoi(raw)
-			if err != nil {
-				return nil, false, fmt.Errorf("parse page query parameter: %w", err)
-			}
-			currentPage = value
-		}
-		query.Set("page", strconv.Itoa(currentPage+1))
-		nextURL.RawQuery = query.Encode()
-		return &nextURL, true, nil
+		return nextPageNumberURL(currentURL, responseValue, pageSize)
 	case openapi.PaginationV1Token:
-		next, ok, err := parseNextLink(headers.Values("Link"))
-		if err != nil || !ok {
-			return nil, ok, err
-		}
-		parsed, err := url.Parse(next)
-		if err != nil {
-			return nil, false, err
-		}
-		return parsed, true, nil
+		return nextLinkURL(headers.Values("Link"))
 	case openapi.PaginationV2Cursor:
-		nextCursor := extractNextCursor(responseValue)
-		if nextCursor == "" {
-			return nil, false, nil
-		}
-		nextURL := *currentURL
-		query := nextURL.Query()
-		query.Set("cursor", nextCursor)
-		nextURL.RawQuery = query.Encode()
-		return &nextURL, true, nil
+		return nextCursorURL(currentURL, responseValue)
 	default:
 		return nil, false, nil
 	}
+}
+
+func nextPageNumberURL(currentURL *url.URL, responseValue any, pageSize int) (*url.URL, bool, error) {
+	itemCount := countItems(responseValue)
+	if itemCount == 0 {
+		return nil, false, nil
+	}
+	if pageSize > 0 && itemCount < pageSize {
+		return nil, false, nil
+	}
+
+	nextURL := *currentURL
+	query := nextURL.Query()
+	currentPage := 1
+	if raw := query.Get("page"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil {
+			return nil, false, fmt.Errorf("parse page query parameter: %w", err)
+		}
+		currentPage = value
+	}
+	query.Set("page", strconv.Itoa(currentPage+1))
+	nextURL.RawQuery = query.Encode()
+	return &nextURL, true, nil
+}
+
+func nextLinkURL(values []string) (*url.URL, bool, error) {
+	next, ok, err := parseNextLink(values)
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+
+	parsed, err := url.Parse(next)
+	if err != nil {
+		return nil, false, err
+	}
+	return parsed, true, nil
+}
+
+func nextCursorURL(currentURL *url.URL, responseValue any) (*url.URL, bool, error) {
+	nextCursor := extractNextCursor(responseValue)
+	if nextCursor == "" {
+		return nil, false, nil
+	}
+
+	nextURL := *currentURL
+	query := nextURL.Query()
+	query.Set("cursor", nextCursor)
+	nextURL.RawQuery = query.Encode()
+	return &nextURL, true, nil
 }
 
 func parseNextLink(values []string) (string, bool, error) {
@@ -675,7 +718,7 @@ func mergePaginated(existing any, next any) any {
 }
 
 func paginatedCollection(current map[string]any, next map[string]any) (string, []any, []any, bool) {
-	for _, key := range []string{"items", "resourceFindings"} {
+	for _, key := range paginatedCollectionKeys {
 		currentItems, currentOK := current[key].([]any)
 		nextItems, nextOK := next[key].([]any)
 		if currentOK && nextOK {
@@ -735,13 +778,4 @@ func defaultIfEmpty(value string, fallback string) string {
 		return fallback
 	}
 	return value
-}
-
-func sortedKeys(values map[string]any) []string {
-	keys := make([]string, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
 }
