@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"upwind-cli/internal/openapi"
+	"github.com/oneslash/upwind-cli/internal/openapi"
 )
 
 var requiredSpecVersions = []string{"v1", "v2"}

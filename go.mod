@@ -1,4 +1,4 @@
-module upwind-cli
+module github.com/oneslash/upwind-cli
 
 go 1.26.0
 

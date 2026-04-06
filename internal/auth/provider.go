@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"upwind-cli/internal/config"
+	"github.com/oneslash/upwind-cli/internal/config"
 )
 
 type Provider struct {

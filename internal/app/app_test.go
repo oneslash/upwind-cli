@@ -10,8 +10,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"upwind-cli/internal/buildinfo"
-	"upwind-cli/internal/openapi"
+	"github.com/oneslash/upwind-cli/internal/buildinfo"
+	"github.com/oneslash/upwind-cli/internal/openapi"
 )
 
 func TestParseNextLink(t *testing.T) {

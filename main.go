@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"upwind-cli/cmd"
+	"github.com/oneslash/upwind-cli/cmd"
 )
 
 func main() {

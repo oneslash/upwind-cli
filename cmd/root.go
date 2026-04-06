@@ -1,6 +1,6 @@
 package cmd
 
-import "upwind-cli/internal/app"
+import "github.com/oneslash/upwind-cli/internal/app"
 
 func Execute() error {
 	rootCmd, err := app.NewRootCmd()

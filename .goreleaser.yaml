@@ -19,9 +19,9 @@ builds:
     ldflags:
       - >-
         -s -w
-        -X upwind-cli/internal/buildinfo.Version={{ .Version }}
-        -X upwind-cli/internal/buildinfo.Commit={{ .Commit }}
-        -X upwind-cli/internal/buildinfo.Date={{ .Date }}
+        -X github.com/oneslash/upwind-cli/internal/buildinfo.Version={{ .Version }}
+        -X github.com/oneslash/upwind-cli/internal/buildinfo.Commit={{ .Commit }}
+        -X github.com/oneslash/upwind-cli/internal/buildinfo.Date={{ .Date }}
 
 archives:
   - id: upwind-archives

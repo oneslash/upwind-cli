@@ -15,11 +15,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"upwind-cli/internal/auth"
-	"upwind-cli/internal/buildinfo"
-	"upwind-cli/internal/config"
-	"upwind-cli/internal/openapi"
-	"upwind-cli/internal/render"
+	"github.com/oneslash/upwind-cli/internal/auth"
+	"github.com/oneslash/upwind-cli/internal/buildinfo"
+	"github.com/oneslash/upwind-cli/internal/config"
+	"github.com/oneslash/upwind-cli/internal/openapi"
+	"github.com/oneslash/upwind-cli/internal/render"
 )
 
 var paginatedCollectionKeys = []string{"items", "resourceFindings"}

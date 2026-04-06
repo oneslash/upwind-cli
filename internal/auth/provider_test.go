@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"upwind-cli/internal/config"
+	"github.com/oneslash/upwind-cli/internal/config"
 )
 
 func TestAuthorizationHeaderReportsNonJSONOAuthErrors(t *testing.T) {
