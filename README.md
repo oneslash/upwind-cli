@@ -1,6 +1,6 @@
 # Upwind CLI
 
-`upwind` is a Go 1.26.1 Cobra CLI for the Upwind Management APIs. It builds a versionless command tree from generated Go catalog data derived from the upstream OpenAPI v1 and v2 specifications, prefers the v2 definition when the same tag and operation exist in both versions, supports table and JSON output, loads `.env` automatically when present, and handles the pagination patterns described by the supplied specs.
+`upwind-cli` is a Go 1.26.1 Cobra CLI for the Upwind Management APIs. It builds a versionless command tree from generated Go catalog data derived from the upstream OpenAPI v1 and v2 specifications, prefers the v2 definition when the same tag and operation exist in both versions, supports table and JSON output, loads `.env` automatically when present, and handles the pagination patterns described by the supplied specs.
 
 ## Install
 
@@ -13,7 +13,7 @@ go install github.com/oneslash/upwind-cli@latest
 Then verify the binary is on your `PATH`:
 
 ```bash
-upwind version
+upwind-cli version
 ```
 
 ## Requirements
@@ -23,14 +23,14 @@ upwind version
 ## Build From Source
 
 ```bash
-go build -o upwind .
+go build -o upwind-cli .
 ```
 
 To print the embedded build metadata:
 
 ```bash
-./upwind version
-./upwind --version
+./upwind-cli version
+./upwind-cli --version
 ```
 
 Tagged release builds inject the tag, commit, and build date automatically.
@@ -75,30 +75,30 @@ cp .env.example .env
 ## Discover Commands
 
 ```bash
-./upwind --help
-./upwind inventory --help
-./upwind inventory search-assets --help
-./upwind threats --help
+./upwind-cli --help
+./upwind-cli inventory --help
+./upwind-cli inventory search-assets --help
+./upwind-cli threats --help
 ```
 
 The generated shape is:
 
-- `upwind <tag> <operation>`
+- `upwind-cli <tag> <operation>`
 
 Examples:
 
-- `upwind threats list-threat-detections`
-- `upwind workflows list-all-workflows`
-- `upwind inventory search-assets`
-- `upwind threats list-stories`
+- `upwind-cli threats list-threat-detections`
+- `upwind-cli workflows list-all-workflows`
+- `upwind-cli inventory search-assets`
+- `upwind-cli threats list-stories`
 
 ## Output Modes
 
 Use `--output table` for human-readable terminal output or `--output json` for raw JSON.
 
 ```bash
-./upwind --output table threats list-threat-detections
-./upwind --output json inventory get-asset --id uwr-example
+./upwind-cli --output table threats list-threat-detections
+./upwind-cli --output json inventory get-asset --id uwr-example
 ```
 
 For list responses, table mode renders rows. For object responses, table mode renders flattened key/value output.
@@ -114,13 +114,13 @@ Operations with JSON request bodies accept either:
 Examples:
 
 ```bash
-./upwind inventory search-assets \
+./upwind-cli inventory search-assets \
   --body '{"conditions":[{"field":"category","operator":"eq","value":["compute_platform"]}]}' \
   --limit 50
 ```
 
 ```bash
-./upwind threats update-threat-detection \
+./upwind-cli threats update-threat-detection \
   --detection-id det_123 \
   --body '{"status":"ARCHIVED"}'
 ```
@@ -138,9 +138,9 @@ Use `--all` on paginated operations to fetch every page automatically.
 Examples:
 
 ```bash
-./upwind events search-shift-left-events --all --per-page 100 --body-file query.json
-./upwind threats get-events-list --all --per-page 100
-./upwind inventory search-assets --all --limit 200 --body-file query.json
+./upwind-cli events search-shift-left-events --all --per-page 100 --body-file query.json
+./upwind-cli threats get-events-list --all --per-page 100
+./upwind-cli inventory search-assets --all --limit 200 --body-file query.json
 ```
 
 Without `--all`, the CLI performs a single request and lets you control the page or cursor flags manually.
@@ -179,7 +179,7 @@ Run the normal validation set before changing behavior:
 ```bash
 go test ./...
 go vet ./...
-go build -o upwind .
+go build -o upwind-cli .
 ```
 
 To validate the release configuration without publishing a GitHub Release:
@@ -198,7 +198,7 @@ On each matching tag, GitHub Actions:
 - checks out the full git history
 - installs the Go toolchain from `go.mod`
 - runs `go test ./...`
-- runs GoReleaser to build `upwind` for Linux, macOS, and Windows on `amd64` and `arm64`
+- runs GoReleaser to build `upwind-cli` for Linux, macOS, and Windows on `amd64` and `arm64`
 - uploads the archives and `checksums.txt` asset to the GitHub Release for that tag
 
 Create and publish a release tag with:
@@ -213,10 +213,10 @@ The GoReleaser configuration is stored in [.goreleaser.yaml](/Users/sardo/Projec
 Useful smoke checks:
 
 ```bash
-./upwind --help
-./upwind inventory --help
-./upwind inventory search-assets --help
-./upwind threats --help
+./upwind-cli --help
+./upwind-cli inventory --help
+./upwind-cli inventory search-assets --help
+./upwind-cli threats --help
 ```
 
 ## AI Skill
@@ -282,17 +282,17 @@ ln -snf "$(pwd)/skills/upwind-cli" ~/.cursor/skills/upwind-cli
 List detections in table form:
 
 ```bash
-./upwind threats list-threat-detections --severity HIGH
+./upwind-cli threats list-threat-detections --severity HIGH
 ```
 
 Fetch a single asset as JSON:
 
 ```bash
-./upwind --output json inventory get-asset --id uwr-b7d8d158c28ab7ca281fd424311e9d19
+./upwind-cli --output json inventory get-asset --id uwr-b7d8d158c28ab7ca281fd424311e9d19
 ```
 
 Search stories with a request body from a file:
 
 ```bash
-./upwind threats search-stories --body-file search.json --limit 100 --all
+./upwind-cli threats search-stories --body-file search.json --limit 100 --all
 ```

@@ -2,11 +2,11 @@
 
 version: 2
 
-project_name: upwind
+project_name: upwind-cli
 
 builds:
-  - id: upwind
-    binary: upwind
+  - id: upwind-cli
+    binary: upwind-cli
     env:
       - CGO_ENABLED=0
     goos:
@@ -24,9 +24,9 @@ builds:
         -X github.com/oneslash/upwind-cli/internal/buildinfo.Date={{ .Date }}
 
 archives:
-  - id: upwind-archives
+  - id: upwind-cli-archives
     ids:
-      - upwind
+      - upwind-cli
     formats:
       - tar.gz
     name_template: >-

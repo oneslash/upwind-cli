@@ -7,7 +7,7 @@ Use this reference when the task is about operating the CLI. It contains detaile
 Build the CLI:
 
 ```bash
-go build -o upwind .
+go build -o upwind-cli .
 ```
 
 Create a local env file:
@@ -70,14 +70,14 @@ Set `UPWIND_ACCESS_TOKEN` or pass `--access-token`. No OAuth call is made. The v
 ## Core Command Shape
 
 ```bash
-upwind <tag> <operation> [flags]
+upwind-cli <tag> <operation> [flags]
 ```
 
 Examples:
-- `upwind threats list-threat-detections`
-- `upwind inventory search-assets`
-- `upwind workflows list-all-workflows`
-- `upwind events search-shift-left-events`
+- `upwind-cli threats list-threat-detections`
+- `upwind-cli inventory search-assets`
+- `upwind-cli workflows list-all-workflows`
+- `upwind-cli events search-shift-left-events`
 
 ### HTTP method patterns
 
@@ -98,9 +98,9 @@ These are conventions — always verify with `--help`. If `--body` and `--body-f
 Always start discovery with live help — command names and flags come from the embedded OpenAPI specs and only `--help` shows the real list:
 
 ```bash
-./upwind --help                              # all tags
-./upwind inventory --help                   # all operations under a tag
-./upwind inventory search-assets --help     # flags and description for one operation
+./upwind-cli --help                              # all tags
+./upwind-cli inventory --help                   # all operations under a tag
+./upwind-cli inventory search-assets --help     # flags and description for one operation
 ```
 
 The `--help` output for each operation includes:
@@ -137,7 +137,7 @@ Run the operation's `--help` to read the OpenAPI summary/description. For the fu
 Inline body:
 
 ```bash
-./upwind inventory search-assets \
+./upwind-cli inventory search-assets \
   --body '{"conditions":[{"field":"category","operator":"eq","value":["compute_platform"]}]}' \
   --limit 50
 ```
@@ -145,19 +145,19 @@ Inline body:
 From file:
 
 ```bash
-./upwind threats search-stories --body-file search.json --limit 100 --all
+./upwind-cli threats search-stories --body-file search.json --limit 100 --all
 ```
 
 From stdin:
 
 ```bash
-cat query.json | ./upwind inventory search-assets --body-file - --limit 50
+cat query.json | ./upwind-cli inventory search-assets --body-file - --limit 50
 ```
 
 Update with inline body:
 
 ```bash
-./upwind threats update-threat-detection \
+./upwind-cli threats update-threat-detection \
   --detection-id det_123 \
   --body '{"status":"ARCHIVED"}'
 ```
@@ -169,7 +169,7 @@ Update with inline body:
 Human-readable. Nested fields are flattened with dot notation (e.g. `metadata.status`). Common fields (`id`, `name`, `severity`, `status`, …) are shown first; remaining fields are alphabetical.
 
 ```bash
-./upwind threats list-threat-detections --severity HIGH
+./upwind-cli threats list-threat-detections --severity HIGH
 ```
 
 Array responses are rendered as row sets. Envelope responses with an `items` or `resourceFindings` key render that array as rows. Single-object responses are rendered as a two-column field/value table with flattened keys sorted alphabetically.
@@ -179,11 +179,11 @@ Array responses are rendered as row sets. Envelope responses with an `items` or 
 Pretty-printed with 2-space indentation. Full API response structure is preserved. Best for scripting and `jq` pipelines.
 
 ```bash
-./upwind --output json inventory get-asset --id uwr-example
+./upwind-cli --output json inventory get-asset --id uwr-example
 ```
 
 ```bash
-./upwind --output json inventory search-assets \
+./upwind-cli --output json inventory search-assets \
   --body '{"conditions":[]}' | jq '.[].id'
 ```
 
@@ -200,9 +200,9 @@ The CLI auto-detects pagination style from the operation's flags. Three modes ex
 Use `--all` to fetch every page automatically. Without it, a single request is made.
 
 ```bash
-./upwind events search-shift-left-events --all --per-page 100 --body-file query.json
-./upwind threats get-events-list --all --per-page 100
-./upwind inventory search-assets --all --limit 200 --body-file query.json
+./upwind-cli events search-shift-left-events --all --per-page 100 --body-file query.json
+./upwind-cli threats get-events-list --all --per-page 100
+./upwind-cli inventory search-assets --all --limit 200 --body-file query.json
 ```
 
 **Pagination flags:**
@@ -220,13 +220,13 @@ When `--all` is combined with `--body`, the same body is re-sent on every page r
 
 ```bash
 # 1. List high-severity detections in table form
-./upwind threats list-threat-detections --severity HIGH
+./upwind-cli threats list-threat-detections --severity HIGH
 
 # 2. Get full JSON details on one detection
-./upwind --output json threats get-threat-detection --detection-id det_abc123
+./upwind-cli --output json threats get-threat-detection --detection-id det_abc123
 
 # 3. Archive it after investigation
-./upwind threats update-threat-detection \
+./upwind-cli threats update-threat-detection \
   --detection-id det_abc123 \
   --body '{"status":"ARCHIVED"}'
 ```
@@ -235,15 +235,15 @@ When `--all` is combined with `--body`, the same body is re-sent on every page r
 
 ```bash
 # 1. Search for compute assets
-./upwind inventory search-assets \
+./upwind-cli inventory search-assets \
   --body '{"conditions":[{"field":"category","operator":"eq","value":["compute_platform"]}]}' \
   --limit 50
 
 # 2. Get full details on a specific asset
-./upwind --output json inventory get-asset --id uwr-b7d8d158c28ab7ca281fd424311e9d19
+./upwind-cli --output json inventory get-asset --id uwr-b7d8d158c28ab7ca281fd424311e9d19
 
 # 3. Fetch ALL matching assets for a report
-./upwind --output json inventory search-assets --all --limit 200 \
+./upwind-cli --output json inventory search-assets --all --limit 200 \
   --body '{"conditions":[{"field":"category","operator":"eq","value":["compute_platform"]}]}' \
   > compute_assets.json
 ```
@@ -252,36 +252,36 @@ When `--all` is combined with `--body`, the same body is re-sent on every page r
 
 ```bash
 # Extract all asset IDs
-./upwind --output json inventory search-assets --all --limit 200 \
+./upwind-cli --output json inventory search-assets --all --limit 200 \
   --body '{"conditions":[]}' | jq -r '.[].id'
 
 # Count threats by severity
-./upwind --output json threats list-threat-detections --all --per-page 100 \
+./upwind-cli --output json threats list-threat-detections --all --per-page 100 \
   | jq 'group_by(.severity) | map({severity: .[0].severity, count: length})'
 
 # Pipe a body from another command
-echo '{"conditions":[]}' | ./upwind inventory search-assets --body-file - --limit 10
+echo '{"conditions":[]}' | ./upwind-cli inventory search-assets --body-file - --limit 10
 ```
 
 ## Shell Completion
 
 ```bash
-./upwind completion bash       # bash
-./upwind completion zsh        # zsh
-./upwind completion fish       # fish
-./upwind completion powershell # powershell
+./upwind-cli completion bash       # bash
+./upwind-cli completion zsh        # zsh
+./upwind-cli completion fish       # fish
+./upwind-cli completion powershell # powershell
 ```
 
 Load immediately in the current shell:
 
 ```bash
-source <(./upwind completion zsh)
+source <(./upwind-cli completion zsh)
 ```
 
 Install persistently on macOS (zsh + Homebrew):
 
 ```bash
-./upwind completion zsh > $(brew --prefix)/share/zsh/site-functions/_upwind
+./upwind-cli completion zsh > $(brew --prefix)/share/zsh/site-functions/_upwind-cli
 ```
 
 ## Error Reference
@@ -336,7 +336,7 @@ If the response body is not valid JSON, it is printed as-is. If the body is empt
 |---------|-----|
 | Wrong environment targeted | Check `UPWIND_REGION` or pass `--region` |
 | Output hard to parse in scripts | Switch to `--output json` and pipe through `jq` |
-| Unknown command or flag | Run `./upwind <tag> --help` — names are generated from OpenAPI and may differ from what you expect |
+| Unknown command or flag | Run `./upwind-cli <tag> --help` — names are generated from OpenAPI and may differ from what you expect |
 | Request returns empty result | Try `--output json` to see the full response; the table renderer skips nil values |
 | Pagination seems incomplete | Add `--all` to fetch every page; without it only one page is returned |
 | Body schema unclear | Run `--help` on the operation for the description, then consult Upwind API docs for the full schema |

@@ -37,7 +37,7 @@ func NewRootCmd() (*cobra.Command, error) {
 	options := loadOptionsFromEnv()
 
 	rootCmd := &cobra.Command{
-		Use:           "upwind",
+		Use:           "upwind-cli",
 		Short:         "CLI client for the Upwind Management APIs",
 		Long:          "A Cobra-based Upwind CLI generated from the provided OpenAPI specifications. When the same tag and operation exist in both versions, the CLI prefers the v2 definition.",
 		SilenceUsage:  true,
@@ -135,6 +135,12 @@ func configureRootFlags(rootCmd *cobra.Command, options *config.Options) {
 	flags.StringVar(&options.AccessToken, "access-token", options.AccessToken, fmt.Sprintf("Bearer token override (env %s)", config.EnvAccessToken))
 	flags.StringVar(&options.Output, "output", defaultIfEmpty(options.Output, "table"), fmt.Sprintf("Output format: table or json (env %s)", config.EnvOutput))
 	flags.DurationVar(&options.Timeout, "timeout", options.Timeout, fmt.Sprintf("HTTP timeout (env %s)", config.EnvTimeout))
+
+	// Credentials picked up from the environment must not appear as
+	// "(default ...)" in help output.
+	for _, name := range []string{"organization-id", "client-id", "client-secret", "access-token"} {
+		flags.Lookup(name).DefValue = ""
+	}
 }
 
 func operationDescriptions(operation openapi.Operation) (string, string) {

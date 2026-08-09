@@ -11,7 +11,7 @@ Upwind is a **cloud security platform** providing APIs for asset inventory, thre
 
 ## When To Use This Skill
 
-Use this skill when the user wants help **operating** the `upwind` binary:
+Use this skill when the user wants help **operating** the `upwind-cli` binary:
 
 - first-time setup and `.env` configuration
 - authentication (OAuth client credentials or bearer token)
@@ -28,12 +28,12 @@ Use this skill when the user wants help **operating** the `upwind` binary:
 
 Read [references/usage.md](references/usage.md) for the full reference. Use this workflow:
 
-1. **Discover commands live** — prefer `./upwind --help` and `./upwind <tag> <operation> --help` over guessing. All command names, flags, and defaults come from the help output.
+1. **Discover commands live** — prefer `./upwind-cli --help` and `./upwind-cli <tag> <operation> --help` over guessing. All command names, flags, and defaults come from the help output.
 2. **Give runnable commands**, not abstract descriptions.
 3. **Always surface auth requirements** — `--organization-id` is required for every call; `--client-id`/`--client-secret` or `--access-token` are required for auth.
 4. **Match output to context** — `--output table` for human reading, `--output json` for scripting or jq pipelines.
 5. **Mention `--all` when results may be paginated** — the CLI supports page, token (Link-header), and cursor pagination; `--all` handles all three automatically.
-6. **Discover request body shape** — run `./upwind <tag> <operation> --help` and read the OpenAPI description, or point the user to the Upwind API docs. The CLI accepts `--body '{...}'`, `--body-file request.json`, or `--body-file -` (stdin).
+6. **Discover request body shape** — run `./upwind-cli <tag> <operation> --help` and read the OpenAPI description, or point the user to the Upwind API docs. The CLI accepts `--body '{...}'`, `--body-file request.json`, or `--body-file -` (stdin).
 7. **Know which operations need a body** — GET operations (list, get) never need one. POST operations (search, create) typically require one; some mark it as required, meaning the CLI errors without it. PUT/PATCH operations (update) need one for the fields being changed. Run `--help` to confirm: if `--body` and `--body-file` flags appear, the operation accepts a body.
 8. **Show error handling** — when suggesting commands, tell the user what common errors look like and how to fix them. See the Gotchas and Error Reference sections below.
 
@@ -41,9 +41,9 @@ Read [references/usage.md](references/usage.md) for the full reference. Use this
 
 ### Command shape
 ```
-upwind <tag> <operation> [flags]
+upwind-cli <tag> <operation> [flags]
 ```
-Examples: `upwind threats list-threat-detections`, `upwind inventory search-assets`
+Examples: `upwind-cli threats list-threat-detections`, `upwind-cli inventory search-assets`
 
 ### HTTP method patterns
 
@@ -95,13 +95,13 @@ These multi-step examples show how commands chain together in real usage.
 
 ```bash
 # List high-severity detections
-./upwind threats list-threat-detections --severity HIGH
+./upwind-cli threats list-threat-detections --severity HIGH
 
 # Get details on a specific detection (use an ID from the list output)
-./upwind --output json threats get-threat-detection --detection-id det_abc123
+./upwind-cli --output json threats get-threat-detection --detection-id det_abc123
 
 # Archive it
-./upwind threats update-threat-detection \
+./upwind-cli threats update-threat-detection \
   --detection-id det_abc123 \
   --body '{"status":"ARCHIVED"}'
 ```
@@ -110,15 +110,15 @@ These multi-step examples show how commands chain together in real usage.
 
 ```bash
 # Search for compute assets
-./upwind inventory search-assets \
+./upwind-cli inventory search-assets \
   --body '{"conditions":[{"field":"category","operator":"eq","value":["compute_platform"]}]}' \
   --limit 50
 
 # Get full details on a specific asset as JSON
-./upwind --output json inventory get-asset --id uwr-b7d8d158c28ab7ca281fd424311e9d19
+./upwind-cli --output json inventory get-asset --id uwr-b7d8d158c28ab7ca281fd424311e9d19
 
 # Fetch all matching assets across pages
-./upwind inventory search-assets --all --limit 200 \
+./upwind-cli inventory search-assets --all --limit 200 \
   --body '{"conditions":[{"field":"category","operator":"eq","value":["compute_platform"]}]}'
 ```
 
@@ -126,11 +126,11 @@ These multi-step examples show how commands chain together in real usage.
 
 ```bash
 # Get all shift-left events as JSON and extract IDs with jq
-./upwind --output json events search-shift-left-events --all --per-page 100 \
+./upwind-cli --output json events search-shift-left-events --all --per-page 100 \
   --body-file query.json | jq '.[].id'
 
 # Pipe a body from another command
-echo '{"conditions":[]}' | ./upwind inventory search-assets --body-file - --limit 10
+echo '{"conditions":[]}' | ./upwind-cli inventory search-assets --body-file - --limit 10
 ```
 
 ## Error Reference
@@ -171,10 +171,10 @@ HTTP errors (status >= 400) include the response body when the API returns one. 
 After updating examples or usage guidance, verify key help screens still match:
 
 ```bash
-./upwind --help
-./upwind inventory --help
-./upwind inventory search-assets --help
-./upwind threats list-threat-detections --help
+./upwind-cli --help
+./upwind-cli inventory --help
+./upwind-cli inventory search-assets --help
+./upwind-cli threats list-threat-detections --help
 ```
 
 A passing state means each help screen shows the expected flags, descriptions, and command names without errors.
